@@ -117,8 +117,8 @@ main(int argc, char *argv[])
   cpu.viewMemoryAt(0x5555);
   assert(cpu.getRegister(Registers::SP) == sp_save + 2);
   unsigned short saved_reg = cpu.getRegister(Registers::R1);
-  assert((saved_reg&0x00FF) == val1);
-  assert(((saved_reg&0xFF00)>>8) == val2);
+  assert((saved_reg&0x00FF) == val2);
+  assert(((saved_reg&0xFF00)>>8) == val1);
 
   cpu.setRegister(Registers::R2, 0x5678); // R2 = 0x5678
 
@@ -144,8 +144,62 @@ main(int argc, char *argv[])
   cpu.viewMemoryAt(sp_save);
   assert(cpu.getRegister(Registers::SP) == sp_save + 2);
   saved_reg = cpu.getRegister(Registers::R1);
-  assert((saved_reg&0x00FF) == val1);
-  assert(((saved_reg&0xFF00)>>8) == val2);
+  assert((saved_reg&0x00FF) == val2);
+  assert(((saved_reg&0xFF00)>>8) == val1);
+
+  /* Stack Test */
+
+  cpu.memory.region[i++] = INSTRUCTION_T::PUSH_LIT;
+  cpu.memory.region[i++] = 0x55;
+  cpu.memory.region[i++] = 0x66;
+  cpu.step();
+  cpu.debug();
+  cpu.viewMemoryAt(cpu.getRegister(Registers::SP));
+
+  cpu.memory.region[i++] = INSTRUCTION_T::PUSH_LIT;
+  cpu.memory.region[i++] = 0x88;
+  cpu.memory.region[i++] = 0x99;
+  cpu.step();
+  cpu.debug();
+  cpu.viewMemoryAt(cpu.getRegister(Registers::SP));
+
+  // push 0 for nargs
+  cpu.memory.region[i++] = INSTRUCTION_T::PUSH_LIT;
+  cpu.memory.region[i++] = 0x00;
+  cpu.memory.region[i++] = 0x00;
+  cpu.step();
+  cpu.debug();
+  cpu.viewMemoryAt(cpu.getRegister(Registers::SP));
+
+  uint16_t funcAddr = 0x3000;
+  cpu.memory.region[funcAddr++] = INSTRUCTION_T::PUSH_LIT;
+  cpu.memory.region[funcAddr++] = 0x55;
+  cpu.memory.region[funcAddr++] = 0x66;
+
+  cpu.memory.region[funcAddr++] = INSTRUCTION_T::PUSH_LIT;
+  cpu.memory.region[funcAddr++] = 0x88;
+  cpu.memory.region[funcAddr++] = 0x99;
+
+  cpu.memory.region[funcAddr++] = INSTRUCTION_T::RET;
+
+  // call funcAddr
+  cpu.memory.region[i++] = INSTRUCTION_T::CALL_LIT;
+  cpu.memory.region[i++] = 0x30;
+  cpu.memory.region[i++] = 0x00;
+  cpu.step(); // call
+  cpu.debug();
+  cpu.viewMemoryAt(cpu.getRegister(Registers::SP), 50);
+  cpu.step(); // push
+  cpu.debug();
+  cpu.viewMemoryAt(cpu.getRegister(Registers::SP), 50);
+  cpu.step(); // push
+  cpu.debug();
+  cpu.viewMemoryAt(cpu.getRegister(Registers::SP), 50);
+  cpu.step(); // ret
+  cpu.debug();
+  cpu.viewMemoryAt(cpu.getRegister(Registers::SP), 50);
+
+
 
   return 0;
 }

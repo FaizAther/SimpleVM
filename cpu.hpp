@@ -17,25 +17,31 @@ template<
 >
 class CPU {
 public:
+  Memory<CPU_MEMORY_SIZE, instructionValue_t> memory = {0};
+  Memory<Registers::register_t::REGISTER_COUNT,registerValue_t> registers = {0};
+
   CPU() {
     std::cout << "CPU init" << std::endl;
     setRegister(Registers::SP, CPU_MEMORY_SIZE - 1 - 1);
     setRegister(Registers::FP, CPU_MEMORY_SIZE - 1 - 1);
   }
-  Memory<CPU_MEMORY_SIZE, instructionValue_t> memory = {0};
-  Memory<Registers::register_t::REGISTER_COUNT,registerValue_t> registers = {0};
+
+  instructionDoubleValue_t StackFrameSz = 0;
   void setRegister(Registers::register_t reg, registerValue_t val) {
     registers.region[reg] = val;
   }
+
   registerValue_t getRegister(Registers::register_t reg) {
     return registers.region[reg];
   }
+
   instructionValue_t fetch() {
     const registerValue_t nextInstructionAddress = getRegister(Registers::register_t::IP);
     const instructionValue_t instruction = memory.region[nextInstructionAddress];
     setRegister(Registers::IP, nextInstructionAddress + 1);
     return instruction;
   }
+
   instructionDoubleValue_t fetchDouble() {
     const registerValue_t nextInstructionAddress = getRegister(Registers::register_t::IP);
     const instructionDoubleValue_t instruction =
@@ -45,21 +51,24 @@ public:
     return instruction;
   }
 
-
-  inline void push(instructionDoubleValue_t addr, instructionDoubleValue_t val) {
+  inline void push(instructionDoubleValue_t val) {
+    registerValue_t addr = getRegister(Registers::SP);
     memory.region[addr+1] = (instructionValue_t)(val & 0x00FF);
     memory.region[addr] = (instructionValue_t)((val & 0xFF00) >> 8);
     setRegister(Registers::SP, addr-2);
+    StackFrameSz += 2;
   }
 
-  inline void pop(instructionDoubleValue_t reg) {
+  inline instructionDoubleValue_t pop(void) {
     registerValue_t addr_from = getRegister(Registers::SP);
-    instructionDoubleValue_t val = memory.region[addr_from+2] | (memory.region[addr_from + 3] << 8);
-    setRegister((Registers::register_t)reg, val);
+    instructionDoubleValue_t val = (memory.region[addr_from+2] << 8) | (memory.region[addr_from + 3]);
     setRegister(Registers::SP, addr_from+2);
+    StackFrameSz -= 2;
+    return val;
   }
 
   void execute(instructionValue_t inst) {
+    printf("inst{%02x}\n",inst);
     switch (inst) {
       // move val reg :: [reg] = val
       case INSTRUCTION_T::MOV_LIT_REG: {
@@ -112,36 +121,58 @@ public:
       }
       case INSTRUCTION_T::PUSH_LIT: {
         instructionDoubleValue_t val = fetchDouble();
-        registerValue_t addr = getRegister(Registers::SP);
-        // memory.region[addr+1] = (instructionValue_t)(val & 0x00FF);
-        // memory.region[addr] = (instructionValue_t)((val & 0xFF00) >> 8);
-        // setRegister(Registers::SP, addr-2);
-        push(addr, val);
+        push(val);
         break;
       } case INSTRUCTION_T::PUSH_REG: {
         instructionValue_t reg = fetch() % Registers::REGISTER_COUNT;
         instructionDoubleValue_t val = getRegister((Registers::register_t)reg);
-        instructionDoubleValue_t addr = getRegister(Registers::SP);
-        // memory.region[addr+1] = (instructionValue_t)(val & 0x00FF);
-        // memory.region[addr] = (instructionValue_t)((val & 0xFF00) >> 8);
-        // setRegister(Registers::SP, addr-2);
-        push(addr, val);
+        push(val);
         break;
       } case INSTRUCTION_T::POP: {
         instructionDoubleValue_t reg = fetch() % Registers::REGISTER_COUNT;
-        // registerValue_t addr_from = getRegister(Registers::SP);
-        // instructionDoubleValue_t val = memory.region[addr_from+2] | (memory.region[addr_from + 3] << 8);
-        // setRegister((Registers::register_t)reg, val);
-        // setRegister(Registers::SP, addr_from+2);
-        pop(reg);
+        setRegister((Registers::register_t)reg, pop());
         break;
       } case INSTRUCTION_T::CALL_LIT: {
+        /* Get the address to set instruction pointer */
         const instructionDoubleValue_t addr = fetchDouble();
-        
+        /* Save General Purpose Registers */
+        push(getRegister(Registers::R1));
+        push(getRegister(Registers::R2));
+        push(getRegister(Registers::R3));
+        push(getRegister(Registers::R4));
+        push(getRegister(Registers::R5));
+        push(getRegister(Registers::R6));
+        push(getRegister(Registers::R7));
+        push(getRegister(Registers::R8));
+        push(getRegister(Registers::IP));
+        /* Save size of frame */
+        push(StackFrameSz + 2);
+        setRegister(Registers::FP, getRegister(Registers::SP));
+        StackFrameSz = 0;
+        setRegister(Registers::IP, addr);
         break;
       } case INSTRUCTION_T::CALL_REG: {
         break;
       } case INSTRUCTION_T::RET: {
+        const instructionDoubleValue_t fpAddr = getRegister(Registers::FP);
+        setRegister(Registers::SP, fpAddr);
+        StackFrameSz = pop();
+        const instructionDoubleValue_t copySFSZ = StackFrameSz;
+        setRegister(Registers::IP, pop());
+        setRegister(Registers::R8, pop());
+        setRegister(Registers::R7, pop());
+        setRegister(Registers::R6, pop());
+        setRegister(Registers::R5, pop());
+        setRegister(Registers::R4, pop());
+        setRegister(Registers::R3, pop());
+        setRegister(Registers::R2, pop());
+        setRegister(Registers::R1, pop());
+        instructionDoubleValue_t argc = pop();
+        while (argc > 0) {
+          pop(); // pop of argument to the funcition
+          argc -= 1;
+        }
+        setRegister(Registers::FP, fpAddr + copySFSZ);
         break;
       } default: {
         printf("ERR: INST{0x%02x} NOT IMPLEMENTED\n", inst);
@@ -158,6 +189,7 @@ public:
     for (const auto &reg : REGISTER_RANGE) {
       std::cout << "\t" << Registers::registerName(reg) << "\t:: " << std::hex << "0x"<< getRegister(reg) << std::endl;
     }
+    std::cout << "\tStackFrameSz\t:: " << StackFrameSz << std::endl;
     std::cout << "}" << std::endl;
   }
 
@@ -176,11 +208,11 @@ public:
     debug();
   }
 
-  void viewMemoryAt(instructionDoubleValue_t addr) {
+  void viewMemoryAt(instructionDoubleValue_t addr, int n = 8) {
     // 0x11AA: 0x04 0x04 0x04 0x04 0x04 0x04 0x04 0x04
     printf("Memory{\n\t%04x: ", addr);
-    for (uint8_t i = 0; i < 8 && addr + i < CPU_MEMORY_SIZE; ++i) {
-      printf("%02x ", memory.region[addr +i]);
+    for (uint8_t i = 0; i < n && (addr + i) < CPU_MEMORY_SIZE; i++) {
+      printf("%04x:{%02x} ", addr + i, memory.region[addr + i]);
     }
     printf("\n}\n");
   }
