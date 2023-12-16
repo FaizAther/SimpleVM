@@ -146,7 +146,7 @@ public:
         push(getRegister(Registers::R8));
         push(getRegister(Registers::IP));
         /* Save size of frame */
-        push(StackFrameSz + 2);
+        push(StackFrameSz + 2U); // 26
         setRegister(Registers::FP, getRegister(Registers::SP));
         StackFrameSz = 0;
         setRegister(Registers::IP, addr);
@@ -156,8 +156,8 @@ public:
       } case INSTRUCTION_T::RET: {
         const instructionDoubleValue_t fpAddr = getRegister(Registers::FP);
         setRegister(Registers::SP, fpAddr);
-        StackFrameSz = pop();
-        const instructionDoubleValue_t copySFSZ = StackFrameSz;
+        const instructionDoubleValue_t copySFSZ = pop();
+        StackFrameSz = copySFSZ - 2;
         setRegister(Registers::IP, pop());
         setRegister(Registers::R8, pop());
         setRegister(Registers::R7, pop());

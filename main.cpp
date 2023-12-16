@@ -147,6 +147,7 @@ main(int argc, char *argv[])
   assert((saved_reg&0x00FF) == val2);
   assert(((saved_reg&0xFF00)>>8) == val1);
 
+
   /* Stack Test */
 
   cpu.memory.region[i++] = INSTRUCTION_T::PUSH_LIT;
@@ -156,6 +157,8 @@ main(int argc, char *argv[])
   cpu.debug();
   cpu.viewMemoryAt(cpu.getRegister(Registers::SP));
 
+  assert(cpu.StackFrameSz == 2);
+
   cpu.memory.region[i++] = INSTRUCTION_T::PUSH_LIT;
   cpu.memory.region[i++] = 0x88;
   cpu.memory.region[i++] = 0x99;
@@ -163,6 +166,9 @@ main(int argc, char *argv[])
   cpu.debug();
   cpu.viewMemoryAt(cpu.getRegister(Registers::SP));
 
+  assert(cpu.StackFrameSz == 4);
+
+  int save_sfs = cpu.StackFrameSz;
   // push 0 for nargs
   cpu.memory.region[i++] = INSTRUCTION_T::PUSH_LIT;
   cpu.memory.region[i++] = 0x00;
@@ -170,6 +176,8 @@ main(int argc, char *argv[])
   cpu.step();
   cpu.debug();
   cpu.viewMemoryAt(cpu.getRegister(Registers::SP));
+
+  assert(cpu.StackFrameSz == 6);
 
   uint16_t funcAddr = 0x3000;
   cpu.memory.region[funcAddr++] = INSTRUCTION_T::PUSH_LIT;
@@ -189,17 +197,20 @@ main(int argc, char *argv[])
   cpu.step(); // call
   cpu.debug();
   cpu.viewMemoryAt(cpu.getRegister(Registers::SP), 50);
+  assert (cpu.StackFrameSz == 0);
   cpu.step(); // push
   cpu.debug();
   cpu.viewMemoryAt(cpu.getRegister(Registers::SP), 50);
+  assert (cpu.StackFrameSz == 2);
   cpu.step(); // push
   cpu.debug();
   cpu.viewMemoryAt(cpu.getRegister(Registers::SP), 50);
+  assert (cpu.StackFrameSz == 4);
   cpu.step(); // ret
   cpu.debug();
   cpu.viewMemoryAt(cpu.getRegister(Registers::SP), 50);
 
-
+  assert(save_sfs == cpu.StackFrameSz);
 
   return 0;
 }
